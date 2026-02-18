@@ -54,13 +54,16 @@ trashImg.src = "assets/trash.png";
 const honkSound = new Audio("assets/honk.mp3");
 honkSound.volume = 0.8;
 
+// ✅ Add your boink sound file here: assets/boink.mp3
+const boinkSound = new Audio("assets/boink.mp3");
+boinkSound.volume = 0.9;
+
 // ✅ Background music
 const bgMusic = new Audio("assets/Background.mp3");
 bgMusic.loop = true;
-bgMusic.volume = 0.4; // softer than honk
+bgMusic.volume = 0.4;
 
 let musicStarted = false;
-
 function startMusic() {
   if (!musicStarted) {
     bgMusic.play().catch(() => {});
@@ -68,7 +71,6 @@ function startMusic() {
   }
 }
 
-// ---------------- GAME STATE ----------------
 let keys = {};
 let score = 0;
 let worldSpeed = 4;
@@ -87,7 +89,17 @@ document.getElementById("honkBtn").addEventListener("click", () => {
   honkSound.play();
 });
 
-// ---------------- GAME LOOP ----------------
+function playBoinkAndDizzy() {
+  // ✅ dizzy effect (~1 sec)
+  seal.dizzyTimer = 75;
+
+  // ✅ boink sound (safe even if missing file; it just won't play)
+  try {
+    boinkSound.currentTime = 0;
+    boinkSound.play();
+  } catch {}
+}
+
 function gameLoop() {
   drawBackground(ctx, canvas);
 
@@ -106,10 +118,16 @@ function gameLoop() {
     checkObstacleCollision(
       seal,
       () => {
+        // ✅ life lost feedback
+        playBoinkAndDizzy();
+
         gameState = "lifeLost";
         gamePaused = true;
       },
       () => {
+        // ✅ game over feedback too
+        playBoinkAndDizzy();
+
         gameState = "gameOver";
       }
     );
