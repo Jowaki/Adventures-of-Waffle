@@ -10,9 +10,7 @@ import { drawBackground, updateBubbles, drawBubbles } from "./effects.js";
 import { drawUI } from "./ui.js";
 
 let foodEaten = 0;
-
 let gameState = "welcome";
-// "welcome", "playing", "lifeLost", "gameOver"
 
 let memoryImages = [
   "assets/memory1.jpg",
@@ -41,6 +39,10 @@ sealImg.src = "assets/sealion_swim.png";
 const fishImg = new Image();
 fishImg.src = "assets/fish_single.png";
 
+// ✅ NEW cute squid sprite sheet (4 frames)
+const squidImg = new Image();
+squidImg.src = "assets/squid_sprite.png";
+
 const welcomeImg = new Image();
 welcomeImg.src = "assets/Welcome page.jpg";
 
@@ -54,11 +56,9 @@ trashImg.src = "assets/trash.png";
 const honkSound = new Audio("assets/honk.mp3");
 honkSound.volume = 0.8;
 
-// ✅ Add your boink sound file here: assets/boink.mp3
 const boinkSound = new Audio("assets/boink.mp3");
 boinkSound.volume = 0.9;
 
-// ✅ Background music
 const bgMusic = new Audio("assets/Background.mp3");
 bgMusic.loop = true;
 bgMusic.volume = 0.4;
@@ -77,10 +77,7 @@ let worldSpeed = 4;
 
 document.addEventListener("keydown", e => {
   keys[e.key] = true;
-
-  if (e.key === "h" || e.key === "H") {
-    toggleObstacleDebug();
-  }
+  if (e.key === "h" || e.key === "H") toggleObstacleDebug();
 });
 document.addEventListener("keyup", e => (keys[e.key] = false));
 
@@ -90,10 +87,7 @@ document.getElementById("honkBtn").addEventListener("click", () => {
 });
 
 function playBoinkAndDizzy() {
-  // ✅ dizzy effect (~1 sec)
   seal.dizzyTimer = 75;
-
-  // ✅ boink sound (safe even if missing file; it just won't play)
   try {
     boinkSound.currentTime = 0;
     boinkSound.play();
@@ -118,16 +112,12 @@ function gameLoop() {
     checkObstacleCollision(
       seal,
       () => {
-        // ✅ life lost feedback
         playBoinkAndDizzy();
-
         gameState = "lifeLost";
         gamePaused = true;
       },
       () => {
-        // ✅ game over feedback too
         playBoinkAndDizzy();
-
         gameState = "gameOver";
       }
     );
@@ -143,7 +133,6 @@ function gameLoop() {
         memoryImg.src = memoryImages[currentMemoryIndex];
         currentMemoryIndex++;
 
-        // ✅ Honk automatically when memory appears
         honkSound.currentTime = 0;
         honkSound.play();
       }
@@ -155,7 +144,10 @@ function gameLoop() {
 
   drawBubbles(ctx);
   drawObstacles(ctx, seaweedImg, trashImg);
-  drawFood(ctx, fishImg);
+
+  // ✅ Draw fish + squid
+  drawFood(ctx, fishImg, squidImg);
+
   drawSeal(ctx, sealImg);
 
   drawUI(ctx, score, seal, gameState === "gameOver", canvas, foodEaten);
@@ -166,11 +158,8 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// ---------------- WELCOME ----------------
 function drawWelcomeScreen() {
-  if (welcomeImg.complete) {
-    ctx.drawImage(welcomeImg, 0, 0, canvas.width, canvas.height);
-  }
+  if (welcomeImg.complete) ctx.drawImage(welcomeImg, 0, 0, canvas.width, canvas.height);
 
   ctx.fillStyle = "white";
   ctx.fillRect(canvas.width / 2 - 120, canvas.height - 200, 240, 70);
@@ -180,7 +169,6 @@ function drawWelcomeScreen() {
   ctx.fillText("START GAME", canvas.width / 2 - 100, canvas.height - 155);
 }
 
-// ---------------- LIFE LOST ----------------
 function drawLifeLostScreen() {
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -193,13 +181,12 @@ function drawLifeLostScreen() {
   ctx.fillText("CLICK TO CONTINUE", canvas.width / 2 - 170, canvas.height / 2 + 40);
 }
 
-// ---------------- MEMORY ----------------
 function drawMemoryScreen() {
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  let imgWidth = 500;
-  let imgHeight = 350;
+  const imgWidth = 500;
+  const imgHeight = 350;
 
   ctx.drawImage(
     memoryImg,
@@ -214,27 +201,22 @@ function drawMemoryScreen() {
   ctx.fillText("CLICK TO CONTINUE", canvas.width / 2 - 170, canvas.height / 2 + 220);
 }
 
-// ---------------- CLICK HANDLER ----------------
 canvas.addEventListener("click", () => {
-  startMusic(); // ✅ start background music on first interaction
+  startMusic();
 
   if (gameState === "welcome") {
     gameState = "playing";
     return;
   }
-
   if (gameState === "lifeLost") {
     gameState = "playing";
     gamePaused = false;
     return;
   }
-
   if (showMemory) {
     showMemory = false;
     gamePaused = false;
   }
 });
 
-sealImg.onload = () => {
-  requestAnimationFrame(gameLoop);
-};
+sealImg.onload = () => requestAnimationFrame(gameLoop);
