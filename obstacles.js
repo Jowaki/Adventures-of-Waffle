@@ -1,86 +1,215 @@
 export let obstacles = [];
 
+// Toggle hitbox drawing (press H in game)
+let debugHitboxes = false;
+export function toggleObstacleDebug() {
+  debugHitboxes = !debugHitboxes;
+}
+
+// ---------------- SEAWEED SETTINGS ----------------
+const SEAWEED_FRAMES = 2;
+const SEAWEED_ANIM_MS = 500;
+const MIN_SEAWEED_SPACING = 260;
+
+// ---------------- TRASH SETTINGS ----------------
+const TRASH_FRAMES = 2;
+const TRASH_ANIM_MS = 650;
+const TRASH_SPEED_MULT = 0.70;
+const TRASH_BOB_AMPLITUDE = 1.2;
+const TRASH_BOB_FREQ = 0.0022;
+
+// Bigger trash
+const TRASH_BASE_W = 240;
+const TRASH_BASE_H = 240;
+
+// --------------------------------------------------
+
 export function spawnObstacle(canvas) {
   let type = Math.random();
 
   if (type < 0.5) {
-    // ground obstacle
+    // Seaweed (ground)
+    const lastSeaweed = [...obstacles].reverse().find(o => o.kind === "seaweed");
+    if (lastSeaweed && canvas.width - lastSeaweed.x < MIN_SEAWEED_SPACING) return;
+
+    const baseHeight = 160;
+    const scale = 0.9 + Math.random() * 0.3;
+
+    const height = baseHeight * scale;
+    const width = 130 * scale;
+
     obstacles.push({
       x: canvas.width,
-      y: canvas.height - 120,
-      width: 80,
-      height: 120,
-      kind: "ground"
+      y: canvas.height - height,
+      width,
+      height,
+      kind: "seaweed",
+      animOffset: Math.random() * 2000
     });
   } else {
-    // floating obstacle
+    // Trash (floating)
+    const scale = 0.9 + Math.random() * 0.4;
+
     obstacles.push({
-      x: canvas.width,
-      y: Math.random() * (canvas.height - 250),
-      width: 90,
-      height: 120,
-      kind: "float"
+      x: canvas.width + Math.random() * 300,
+      y: Math.random() * (canvas.height - 360) + 80,
+      width: TRASH_BASE_W * scale,
+      height: TRASH_BASE_H * scale,
+      kind: "trash",
+      animOffset: Math.random() * 2000,
+      bobOffset: Math.random() * 2000
     });
   }
 }
 
 export function updateObstacles(worldSpeed, canvas) {
-  for (let obs of obstacles) obs.x -= worldSpeed;
+  for (let obs of obstacles) {
+    if (obs.kind === "trash") {
+      obs.x -= worldSpeed * TRASH_SPEED_MULT;
+      obs.y += Math.sin((Date.now() + obs.bobOffset) * TRASH_BOB_FREQ) * TRASH_BOB_AMPLITUDE;
+    } else {
+      obs.x -= worldSpeed;
+    }
+  }
 
-  obstacles = obstacles.filter(o => o.x > -200);
+  obstacles = obstacles.filter(o => o.x > -450);
 
   if (Math.random() < 0.02) spawnObstacle(canvas);
 }
 
-export function drawObstacles(ctx) {
+export function drawObstacles(ctx, seaweedImg, trashImg) {
   for (let obs of obstacles) {
-    ctx.fillStyle = "#495057";
-    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    if (obs.kind === "seaweed") {
+      drawSeaweed(ctx, obs, seaweedImg);
+    } else if (obs.kind === "trash") {
+      drawTrash(ctx, obs, trashImg);
+    } else {
+      ctx.fillStyle = "#495057";
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    }
+
+    if (debugHitboxes) {
+      drawHitbox(ctx, obs);
+    }
   }
 }
 
-// ---------- collision helpers ----------
-function rectsIntersect(a, b) {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
+function drawSeaweed(ctx, obs, seaweedImg) {
+  if (!seaweedImg || !seaweedImg.complete || !seaweedImg.naturalWidth) {
+    ctx.fillStyle = "#2a9d8f";
+    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    return;
+  }
+
+  const frameW = seaweedImg.naturalWidth / SEAWEED_FRAMES;
+  const frameH = seaweedImg.naturalHeight;
+
+  const t = Date.now() + obs.animOffset;
+  const frame = Math.floor(t / SEAWEED_ANIM_MS) % SEAWEED_FRAMES;
+
+  ctx.drawImage(
+    seaweedImg,
+    frame * frameW,
+    0,
+    frameW,
+    frameH,
+    obs.x,
+    obs.y,
+    obs.width,
+    obs.height
   );
 }
 
-function getSealHitbox(seal) {
-  // tighter than before (sprites usually have lots of transparent padding)
+function drawTrash(ctx, obs, trashImg) {
+  if (!trashImg || !trashImg.complete || !trashImg.naturalWidth) {
+    ctx.fillStyle = "#6c757d";
+    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    return;
+  }
+
+  const frameW = trashImg.naturalWidth / TRASH_FRAMES;
+  const frameH = trashImg.naturalHeight;
+
+  const t = Date.now() + obs.animOffset;
+  const frame = Math.floor(t / TRASH_ANIM_MS) % TRASH_FRAMES;
+
+  ctx.drawImage(
+    trashImg,
+    frame * frameW,
+    0,
+    frameW,
+    frameH,
+    obs.x,
+    obs.y,
+    obs.width,
+    obs.height
+  );
+}
+
+// ---------------- Circle collision (fixes “invisible hits”) ----------------
+
+function circleIntersect(a, b) {
+  const dx = a.cx - b.cx;
+  const dy = a.cy - b.cy;
+  const r = a.r + b.r;
+  return dx * dx + dy * dy <= r * r;
+}
+
+function getSealCircle(seal) {
+  // Small, forgiving hit radius (tightened)
+  const r = Math.min(seal.width, seal.height) * 0.22;
   return {
-    x: seal.x + seal.width * 0.28,
-    y: seal.y + seal.height * 0.28,
-    width: seal.width * 0.44,
-    height: seal.height * 0.44
+    cx: seal.x + seal.width * 0.52,
+    cy: seal.y + seal.height * 0.55,
+    r
   };
 }
 
-function getObstacleHitbox(obs) {
-  // Make obstacle hitbox smaller so "near-misses" don't count as hits
-  // Ground obstacles tend to feel unfair → shrink slightly more.
-  const padX = obs.kind === "ground" ? 18 : 14;
-  const padY = obs.kind === "ground" ? 18 : 14;
+function getObstacleCircle(obs) {
+  if (obs.kind === "seaweed") {
+    // Only base/rocks should hurt (NOT leafy top)
+    return {
+      cx: obs.x + obs.width * 0.50,
+      cy: obs.y + obs.height * 0.80,
+      r: Math.min(obs.width, obs.height) * 0.22
+    };
+  }
 
+  if (obs.kind === "trash") {
+    // Tight circle inside the bag (ignores surrounding bubbles/chips)
+    return {
+      cx: obs.x + obs.width * 0.55,
+      cy: obs.y + obs.height * 0.55,
+      r: Math.min(obs.width, obs.height) * 0.23
+    };
+  }
+
+  // fallback
   return {
-    x: obs.x + padX,
-    y: obs.y + padY,
-    width: Math.max(1, obs.width - padX * 2),
-    height: Math.max(1, obs.height - padY * 2)
+    cx: obs.x + obs.width * 0.5,
+    cy: obs.y + obs.height * 0.5,
+    r: Math.min(obs.width, obs.height) * 0.25
   };
 }
 
-// ✅ Much tighter collision (fixes dying "without bumping")
+function drawHitbox(ctx, obs) {
+  const c = getObstacleCircle(obs);
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(c.cx, c.cy, c.r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function checkObstacleCollision(seal, onLifeLost, onGameOver) {
-  const sealHitbox = getSealHitbox(seal);
+  const sealC = getSealCircle(seal);
 
   for (let obs of obstacles) {
-    const obsHitbox = getObstacleHitbox(obs);
+    const obsC = getObstacleCircle(obs);
 
-    if (rectsIntersect(sealHitbox, obsHitbox)) {
+    if (circleIntersect(sealC, obsC)) {
       if (!seal.invincible) {
         seal.lives--;
         seal.invincible = true;
@@ -89,9 +218,7 @@ export function checkObstacleCollision(seal, onLifeLost, onGameOver) {
         if (seal.lives <= 0) onGameOver();
         else onLifeLost();
       }
-
-      // stop after first hit this frame
-      return;
+      return; // one collision per frame
     }
   }
 }

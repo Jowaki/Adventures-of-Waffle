@@ -1,13 +1,17 @@
 import { seal, updateSeal, drawSeal } from "./seal.js";
-import { updateObstacles, drawObstacles, checkObstacleCollision } from "./obstacles.js";
+import {
+  updateObstacles,
+  drawObstacles,
+  checkObstacleCollision,
+  toggleObstacleDebug
+} from "./obstacles.js";
 import { updateFood, drawFood, checkFoodCollision } from "./food.js";
 import { drawBackground, updateBubbles, drawBubbles } from "./effects.js";
 import { drawUI } from "./ui.js";
 
 let foodEaten = 0;
 
-// ---------------- GAME STATE ----------------
-let gameState = "welcome"; 
+let gameState = "welcome";
 // "welcome", "playing", "lifeLost", "gameOver"
 
 let memoryImages = [
@@ -30,6 +34,7 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+// ---------------- IMAGES ----------------
 const sealImg = new Image();
 sealImg.src = "assets/sealion_swim.png";
 
@@ -39,37 +44,63 @@ fishImg.src = "assets/fish_single.png";
 const welcomeImg = new Image();
 welcomeImg.src = "assets/Welcome page.jpg";
 
-const honkSound = new Audio("assets/honk.mp3");
+const seaweedImg = new Image();
+seaweedImg.src = "assets/seaweed.png";
 
+const trashImg = new Image();
+trashImg.src = "assets/trash.png";
+
+// ---------------- AUDIO ----------------
+const honkSound = new Audio("assets/honk.mp3");
+honkSound.volume = 0.8;
+
+// ✅ Background music
+const bgMusic = new Audio("assets/Background.mp3");
+bgMusic.loop = true;
+bgMusic.volume = 0.4; // softer than honk
+
+let musicStarted = false;
+
+function startMusic() {
+  if (!musicStarted) {
+    bgMusic.play().catch(() => {});
+    musicStarted = true;
+  }
+}
+
+// ---------------- GAME STATE ----------------
 let keys = {};
 let score = 0;
 let worldSpeed = 4;
 
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+document.addEventListener("keydown", e => {
+  keys[e.key] = true;
+
+  if (e.key === "h" || e.key === "H") {
+    toggleObstacleDebug();
+  }
+});
+document.addEventListener("keyup", e => (keys[e.key] = false));
 
 document.getElementById("honkBtn").addEventListener("click", () => {
   honkSound.currentTime = 0;
   honkSound.play();
 });
 
+// ---------------- GAME LOOP ----------------
 function gameLoop() {
-
   drawBackground(ctx, canvas);
 
-  // -------- WELCOME --------
   if (gameState === "welcome") {
     drawWelcomeScreen();
     requestAnimationFrame(gameLoop);
     return;
   }
 
-  // -------- PLAYING --------
   if (gameState === "playing" && !gamePaused) {
-
     updateSeal(keys, canvas);
     updateObstacles(worldSpeed, canvas);
-    updateFood(canvas);
+    updateFood(canvas, worldSpeed);
     updateBubbles(canvas);
 
     checkObstacleCollision(
@@ -83,15 +114,20 @@ function gameLoop() {
       }
     );
 
-    checkFoodCollision(seal, (points) => {
+    checkFoodCollision(seal, points => {
       score += points;
       foodEaten++;
 
       if (foodEaten % 5 === 0 && currentMemoryIndex < memoryImages.length) {
         gamePaused = true;
         showMemory = true;
+
         memoryImg.src = memoryImages[currentMemoryIndex];
         currentMemoryIndex++;
+
+        // ✅ Honk automatically when memory appears
+        honkSound.currentTime = 0;
+        honkSound.play();
       }
     });
 
@@ -100,7 +136,7 @@ function gameLoop() {
   }
 
   drawBubbles(ctx);
-  drawObstacles(ctx);
+  drawObstacles(ctx, seaweedImg, trashImg);
   drawFood(ctx, fishImg);
   drawSeal(ctx, sealImg);
 
@@ -112,9 +148,8 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// ---------------- WELCOME SCREEN ----------------
+// ---------------- WELCOME ----------------
 function drawWelcomeScreen() {
-
   if (welcomeImg.complete) {
     ctx.drawImage(welcomeImg, 0, 0, canvas.width, canvas.height);
   }
@@ -124,38 +159,24 @@ function drawWelcomeScreen() {
 
   ctx.fillStyle = "black";
   ctx.font = "30px monospace";
-  ctx.fillText(
-    "START GAME",
-    canvas.width / 2 - 100,
-    canvas.height - 155
-  );
+  ctx.fillText("START GAME", canvas.width / 2 - 100, canvas.height - 155);
 }
 
 // ---------------- LIFE LOST ----------------
 function drawLifeLostScreen() {
-
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   ctx.fillStyle = "white";
   ctx.font = "50px monospace";
-  ctx.fillText(
-    "Ouch! Life Lost!",
-    canvas.width / 2 - 220,
-    canvas.height / 2 - 20
-  );
+  ctx.fillText("Ouch! Life Lost!", canvas.width / 2 - 220, canvas.height / 2 - 20);
 
   ctx.font = "28px monospace";
-  ctx.fillText(
-    "CLICK TO CONTINUE",
-    canvas.width / 2 - 170,
-    canvas.height / 2 + 40
-  );
+  ctx.fillText("CLICK TO CONTINUE", canvas.width / 2 - 170, canvas.height / 2 + 40);
 }
 
 // ---------------- MEMORY ----------------
 function drawMemoryScreen() {
-
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -172,15 +193,12 @@ function drawMemoryScreen() {
 
   ctx.fillStyle = "white";
   ctx.font = "30px monospace";
-  ctx.fillText(
-    "CLICK TO CONTINUE",
-    canvas.width / 2 - 170,
-    canvas.height / 2 + 220
-  );
+  ctx.fillText("CLICK TO CONTINUE", canvas.width / 2 - 170, canvas.height / 2 + 220);
 }
 
 // ---------------- CLICK HANDLER ----------------
 canvas.addEventListener("click", () => {
+  startMusic(); // ✅ start background music on first interaction
 
   if (gameState === "welcome") {
     gameState = "playing";

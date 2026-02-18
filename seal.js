@@ -143,4 +143,3 @@ export function drawSeal(ctx, sealImg) {
     seal.height
   );
 }
-

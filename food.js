@@ -1,32 +1,104 @@
 export let foodList = [];
 
-export function spawnFood(canvas) {
+// ---- TUNING ----
+const MIN_SPAWN_DELAY_MS = 450;  // a bit faster but still spaced
+const SPAWN_AHEAD_RANGE = 1100;  // spread fish further ahead
+const MIN_Y = 60;
+const MAX_Y_PADDING = 120;
+
+// How fast fish should be relative to the world speed.
+// If obstacles are moving at worldSpeed, fish should generally move faster than that
+// so they look like they're actively swimming.
+const FISH_SPEED_MULT_MIN = 0.95;
+const FISH_SPEED_MULT_MAX = 1.55;
+
+// Add a bit of extra random px/frame so fish don't all match worldSpeed perfectly
+const FISH_SPEED_BONUS_MIN = 0.0;
+const FISH_SPEED_BONUS_MAX = 1.6;
+
+let lastSpawnTime = 0;
+
+export function spawnFood(canvas, worldSpeed) {
+  const now = Date.now();
+  if (now - lastSpawnTime < MIN_SPAWN_DELAY_MS) return;
+  lastSpawnTime = now;
+
+  const yMax = Math.max(MIN_Y + 1, canvas.height - MAX_Y_PADDING);
+
+  // Spawn into an off-screen band for better spacing distribution
+  const xSpawn = canvas.width + Math.random() * SPAWN_AHEAD_RANGE;
+
+  // Slight size variation
+  const baseSize = 70;
+  const scale = 0.85 + Math.random() * 0.35;
+
+  // ✅ Speed tied to worldSpeed so fish never feel like they're drifting backwards
+  const speedMult =
+    FISH_SPEED_MULT_MIN + Math.random() * (FISH_SPEED_MULT_MAX - FISH_SPEED_MULT_MIN);
+  const speedBonus =
+    FISH_SPEED_BONUS_MIN + Math.random() * (FISH_SPEED_BONUS_MAX - FISH_SPEED_BONUS_MIN);
+
+  const speed = worldSpeed * speedMult + speedBonus;
+
   foodList.push({
-    x: canvas.width,
-    y: Math.random() * (canvas.height - 100) + 50,
-    width: 70,
-    height: 70,
-    frame: 0,
-    type: Math.random() < 0.7 ? "fish" : "squid"
+    x: xSpawn,
+    y: Math.random() * (yMax - MIN_Y) + MIN_Y,
+    width: baseSize * scale,
+    height: baseSize * scale,
+    type: Math.random() < 0.7 ? "fish" : "squid",
+
+    // swim speed in px/frame
+    speed,
+
+    // bobbing
+    bobOffset: Math.random() * 1000
   });
 }
 
-export function updateFood(canvas) {
-  const swimSpeed = 1.5; // control fish speed here
+export function updateFood(canvas, worldSpeed) {
+  // Spawn with probability but spacing is enforced by MIN_SPAWN_DELAY_MS + band spawn
+  if (Math.random() < 0.06) spawnFood(canvas, worldSpeed);
 
   for (let f of foodList) {
-    f.x -= swimSpeed;
-    f.y += Math.sin(Date.now() * 0.002 + f.x * 0.01) * 0.4;
+    // ✅ swim right -> left
+    f.x -= f.speed;
+
+    // gentle floating motion
+    f.y += Math.sin((Date.now() + f.bobOffset) * 0.002 + f.x * 0.01) * 0.6;
   }
 
-  foodList = foodList.filter(f => f.x > -100);
-
-  if (Math.random() < 0.01) spawnFood(canvas);
+  foodList = foodList.filter(f => f.x > -200);
 }
 
 export function drawFood(ctx, fishImg) {
   for (let f of foodList) {
-    ctx.drawImage(fishImg, f.x, f.y, f.width, f.height);
+    // ✅ Auto-face based on movement direction:
+    // If moving left (x decreasing), the fish should face LEFT.
+    // We don't assume your art direction; we make it correct visually.
+    // By default, many sprites face RIGHT in the source image.
+    // So: moving left => flip horizontally.
+    const movingLeft = true;
+
+    ctx.save();
+    ctx.translate(f.x + f.width / 2, f.y + f.height / 2);
+
+    // If your sprite already faces LEFT by default, set this to false:
+    // const SPRITE_DEFAULT_FACES_RIGHT = false;
+    const SPRITE_DEFAULT_FACES_RIGHT = true;
+
+    const shouldFlip = SPRITE_DEFAULT_FACES_RIGHT && movingLeft;
+
+    if (shouldFlip) ctx.scale(-1, 1);
+
+    ctx.drawImage(
+      fishImg,
+      -f.width / 2,
+      -f.height / 2,
+      f.width,
+      f.height
+    );
+
+    ctx.restore();
   }
 }
 
@@ -41,7 +113,6 @@ function rectsIntersect(a, b) {
 }
 
 function getSealHitbox(seal) {
-  // match the tighter seal hitbox used in obstacles.js
   return {
     x: seal.x + seal.width * 0.28,
     y: seal.y + seal.height * 0.28,
@@ -51,7 +122,6 @@ function getSealHitbox(seal) {
 }
 
 function getFoodHitbox(f) {
-  // Fish sprite likely has transparent padding → tighten a lot
   const padX = f.width * 0.25;
   const padY = f.height * 0.25;
 
@@ -63,7 +133,6 @@ function getFoodHitbox(f) {
   };
 }
 
-// ✅ Fixes "eats food without contact"
 export function checkFoodCollision(seal, addScore) {
   const sealHitbox = getSealHitbox(seal);
 
@@ -74,7 +143,7 @@ export function checkFoodCollision(seal, addScore) {
     if (rectsIntersect(sealHitbox, foodHitbox)) {
       addScore(200);
       foodList.splice(i, 1);
-      return; // only eat one per frame
+      return;
     }
   }
 }

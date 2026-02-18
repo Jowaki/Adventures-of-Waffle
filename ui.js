@@ -29,4 +29,3 @@ export function drawUI(ctx, score, seal, gameOver, canvas, foodEaten) {
     );
   }
 }
-
